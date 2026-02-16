@@ -74,6 +74,11 @@ Runs on:
 - Manual trigger
 - Tag push matching `v*`
 
+Release behavior:
+
+- Tag push (example: `v1.0.0`) builds macOS + Windows installers and publishes/updates a GitHub Release for that tag.
+- Manual trigger can optionally publish a release by enabling `create_release` and providing `tag`.
+
 ## Future Android / iOS
 
 For mobile packaging, keep the current React/Vite renderer and add Capacitor native shells.
@@ -90,3 +95,4 @@ Useful scripts (after installing Capacitor packages):
 Details:
 
 - `docs/PACKAGING_AND_MOBILE.md`
+- `docs/CROSS_PLATFORM_REARCHITECTURE.md`

@@ -4,6 +4,8 @@ import {
   Bold,
   Code2,
   Copy,
+  PanelLeft,
+  GripVertical,
   FilePlus2,
   Heading1,
   KanbanSquare,
@@ -47,12 +49,13 @@ const WORKSPACE_STORAGE_KEY = "kanban.workspace.v1";
 const VIEW_STORAGE_KEY = "kanban.view.v1";
 const THEME_STORAGE_KEY = "kanban.theme.v1";
 
-const STATUSES = [
+const DEFAULT_SECTIONS = [
   { id: "backlog", label: "Backlog" },
   { id: "in-progress", label: "In Progress" },
   { id: "review", label: "Review" },
   { id: "done", label: "Done" }
 ];
+const DEFAULT_STATUS_ID = DEFAULT_SECTIONS[0].id;
 
 const priorityClass = {
   low: "bg-emerald-700/90 text-white border-emerald-800",
@@ -87,20 +90,22 @@ const MotionCard = motion.create(Card);
 const easeOut = [0.22, 1, 0.36, 1];
 const springLayout = { type: "spring", stiffness: 500, damping: 36, mass: 0.7 };
 
-const blankForm = {
-  title: "",
-  description: "",
-  priority: "medium",
-  status: "backlog",
-  cardType: "basic",
-  checklistText: "",
-  deadlineNote: "",
-  recurrenceRule: "weekly",
-  matrixAction: "do",
-  assignee: "",
-  dueDate: "",
-  tags: ""
-};
+function createBlankForm(status = DEFAULT_STATUS_ID) {
+  return {
+    title: "",
+    description: "",
+    priority: "medium",
+    status,
+    cardType: "basic",
+    checklistText: "",
+    deadlineNote: "",
+    recurrenceRule: "weekly",
+    matrixAction: "do",
+    assignee: "",
+    dueDate: "",
+    tags: ""
+  };
+}
 
 const blankProjectForm = {
   name: "",
@@ -273,6 +278,46 @@ function buildInitialNotesState(projectName = "Plan") {
 
 function resolveProjectType(value) {
   return PROJECT_TYPE_OPTIONS.some((option) => option.id === value) ? value : "custom";
+}
+
+function normalizeSections(source) {
+  const fallback = DEFAULT_SECTIONS.map((section) => ({ ...section }));
+  if (!Array.isArray(source)) return fallback;
+
+  const seen = new Set();
+  const sections = source
+    .filter(Boolean)
+    .map((section, index) => {
+      const rawId = typeof section?.id === "string" ? section.id.trim() : "";
+      const rawLabel = typeof section?.label === "string" ? section.label.trim() : "";
+      const id = rawId || `section-${index + 1}`;
+      const label = rawLabel || `Section ${index + 1}`;
+      if (!id || seen.has(id)) return null;
+      seen.add(id);
+      return { id, label };
+    })
+    .filter(Boolean);
+
+  return sections.length > 0 ? sections : fallback;
+}
+
+function createSectionId(label, existingIds = []) {
+  const base =
+    String(label || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "section";
+  const used = new Set(existingIds);
+  let nextId = base;
+  let counter = 2;
+
+  while (used.has(nextId)) {
+    nextId = `${base}-${counter}`;
+    counter += 1;
+  }
+
+  return nextId;
 }
 
 function detectResourceKind(url) {
@@ -553,11 +598,10 @@ function normalizeCardMeta(source, status, tags = []) {
   };
 }
 
-function normalizeTask(task, index) {
-  const fallbackStatus = "backlog";
+function normalizeTask(task, index, sectionIds = [], fallbackStatus = DEFAULT_STATUS_ID) {
   const fallbackPriority = "medium";
   const now = Date.now();
-  const normalizedStatus = STATUSES.some((status) => status.id === task?.status) ? task.status : fallbackStatus;
+  const normalizedStatus = sectionIds.includes(task?.status) ? task.status : fallbackStatus;
   const tags = Array.isArray(task?.tags) ? task.tags.map((tag) => String(tag).trim()).filter(Boolean) : [];
 
   return {
@@ -576,9 +620,14 @@ function normalizeTask(task, index) {
   };
 }
 
-function normalizeTasks(source, fallback = []) {
+function normalizeTasks(source, fallback = [], sections = DEFAULT_SECTIONS) {
   if (!Array.isArray(source)) return fallback;
-  return source.filter(Boolean).map((task, index) => normalizeTask(task, index));
+  const normalizedSections = normalizeSections(sections);
+  const sectionIds = normalizedSections.map((section) => section.id);
+  const fallbackStatus = sectionIds[0] || DEFAULT_STATUS_ID;
+  return source
+    .filter(Boolean)
+    .map((task, index) => normalizeTask(task, index, sectionIds, fallbackStatus));
 }
 
 function normalizeNotesState(source, projectName = "Plan") {
@@ -647,13 +696,15 @@ function createProject(overrides = {}) {
   const name = typeof overrides.name === "string" && overrides.name.trim() ? overrides.name.trim() : "Untitled Plan";
   const description = typeof overrides.description === "string" ? overrides.description : "";
   const type = resolveProjectType(overrides.type);
+  const sections = normalizeSections(overrides.sections);
 
   return {
     id: typeof overrides.id === "string" && overrides.id ? overrides.id : crypto.randomUUID(),
     name,
     description,
     type,
-    tasks: normalizeTasks(overrides.tasks),
+    sections,
+    tasks: normalizeTasks(overrides.tasks, [], sections),
     notesState: normalizeNotesState(overrides.notesState, name),
     resources: normalizeResources(overrides.resources),
     createdAt: Number.isFinite(overrides.createdAt) ? overrides.createdAt : now,
@@ -780,8 +831,11 @@ const TaskItem = memo(function TaskItem({
   task,
   index,
   isDragging,
+  sections,
+  completedStatusId,
   onEdit,
   onDelete,
+  onMove,
   onDragStart,
   onDragEnd
 }) {
@@ -799,7 +853,7 @@ const TaskItem = memo(function TaskItem({
           { id: `${task.id}-build`, label: "Build", done: false },
           { id: `${task.id}-review`, label: "Review", done: false }
         ];
-  const doneCount = checklistItems.filter((item) => task.status === "done" || item.done).length;
+  const doneCount = checklistItems.filter((item) => task.status === completedStatusId || item.done).length;
   const checklistPercent = checklistItems.length > 0 ? Math.round((doneCount / checklistItems.length) * 100) : 0;
   const checklistVisibleItems = checklistItems.slice(0, 4);
 
@@ -896,7 +950,7 @@ const TaskItem = memo(function TaskItem({
               />
             </div>
             {checklistVisibleItems.map((item) => {
-              const isDone = task.status === "done" || item.done;
+              const isDone = task.status === completedStatusId || item.done;
               return (
                 <div key={item.id} className="flex items-center gap-2 rounded-sm px-1 py-0.5 text-xs">
                   <span
@@ -954,6 +1008,23 @@ const TaskItem = memo(function TaskItem({
           >
             Delete
           </Button>
+          <label className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground sm:hidden">
+            Move
+            <select
+              aria-label={`Move ${task.title} to status`}
+              className="h-8 rounded-md border border-input bg-card px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={task.status}
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+              onChange={(event) => onMove(task.id, event.target.value)}
+            >
+              {sections.map((status) => (
+                <option key={`${task.id}-${status.id}`} value={status.id}>
+                  {status.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </CardContent>
     </MotionCard>
@@ -975,11 +1046,17 @@ function App() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
-  const [formValues, setFormValues] = useState(blankForm);
+  const [formValues, setFormValues] = useState(() => createBlankForm());
   const [checklistDraft, setChecklistDraft] = useState([]);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [projectDialogMode, setProjectDialogMode] = useState("create");
   const [projectFormValues, setProjectFormValues] = useState(blankProjectForm);
+  const [sectionsDialogOpen, setSectionsDialogOpen] = useState(false);
+  const [sectionDrafts, setSectionDrafts] = useState([]);
+  const [newSectionLabel, setNewSectionLabel] = useState("");
+  const [draggedSectionId, setDraggedSectionId] = useState("");
+  const [dragOverSectionId, setDragOverSectionId] = useState("");
   const notesEditorRef = useRef(null);
   const deferredSearchText = useDeferredValue(searchText);
 
@@ -991,6 +1068,12 @@ function App() {
   }, [workspace]);
 
   const tasks = activeProject?.tasks ?? [];
+  const sections = activeProject?.sections ?? DEFAULT_SECTIONS;
+  const sectionIds = useMemo(() => sections.map((section) => section.id), [sections]);
+  const defaultStatus = sectionIds[0] || DEFAULT_STATUS_ID;
+  const completedStatusId = sectionIds.includes("done")
+    ? "done"
+    : sectionIds[sectionIds.length - 1] || DEFAULT_STATUS_ID;
   const notesState = activeProject?.notesState ?? { notes: [], activeNoteId: "" };
   const totalNoteLinks = useMemo(
     () =>
@@ -1027,6 +1110,21 @@ function App() {
     const timeout = window.setTimeout(() => setDropPulseStatus(""), 320);
     return () => window.clearTimeout(timeout);
   }, [dropPulseStatus]);
+
+  useEffect(() => {
+    if (!sectionIds.includes(formValues.status)) {
+      setFormValues((current) => ({ ...current, status: defaultStatus }));
+    }
+  }, [defaultStatus, formValues.status, sectionIds]);
+
+  useEffect(() => {
+    if (dragOverStatus && !sectionIds.includes(dragOverStatus)) {
+      setDragOverStatus("");
+    }
+    if (dropPulseStatus && !sectionIds.includes(dropPulseStatus)) {
+      setDropPulseStatus("");
+    }
+  }, [dragOverStatus, dropPulseStatus, sectionIds]);
 
   const patchActiveProject = useCallback((updater) => {
     setWorkspace((current) => {
@@ -1068,19 +1166,23 @@ function App() {
       })
       .sort((a, b) => b.createdAt - a.createdAt);
 
-    const initial = {
-      backlog: [],
-      "in-progress": [],
-      review: [],
-      done: []
-    };
+    const initial = sections.reduce((accumulator, section) => {
+      accumulator[section.id] = [];
+      return accumulator;
+    }, {});
 
     for (const task of filtered) {
-      initial[task.status].push(task);
+      if (initial[task.status]) {
+        initial[task.status].push(task);
+      } else {
+        const fallbackStatus = sections[0]?.id || DEFAULT_STATUS_ID;
+        if (!initial[fallbackStatus]) initial[fallbackStatus] = [];
+        initial[fallbackStatus].push(task);
+      }
     }
 
     return initial;
-  }, [tasks, deferredSearchText, priorityFilter]);
+  }, [tasks, deferredSearchText, priorityFilter, sections]);
 
   const activeNote = useMemo(
     () => notesState.notes.find((note) => note.id === notesState.activeNoteId) ?? null,
@@ -1141,23 +1243,125 @@ function App() {
     setProjectDialogOpen(true);
   }, [activeProject]);
 
-  const openCreateDialog = useCallback(() => {
-    setEditingTaskId(null);
-    setFormValues(blankForm);
-    setChecklistDraft([]);
-    setDialogOpen(true);
+  const openSectionsDialog = useCallback(() => {
+    setSectionDrafts(sections.map((section) => ({ ...section })));
+    setNewSectionLabel("");
+    setDraggedSectionId("");
+    setDragOverSectionId("");
+    setSectionsDialogOpen(true);
+  }, [sections]);
+
+  const handleSectionDraftLabelChange = useCallback((sectionId, label) => {
+    setSectionDrafts((current) =>
+      current.map((section) => (section.id === sectionId ? { ...section, label } : section))
+    );
   }, []);
 
+  const handleAddSectionDraft = useCallback(() => {
+    const label = newSectionLabel.trim();
+    if (!label) return;
+
+    setSectionDrafts((current) => [
+      ...current,
+      { id: createSectionId(label, current.map((section) => section.id)), label }
+    ]);
+    setNewSectionLabel("");
+  }, [newSectionLabel]);
+
+  const handleDeleteSectionDraft = useCallback((sectionId) => {
+    setSectionDrafts((current) => {
+      if (current.length <= 1) return current;
+      return current.filter((section) => section.id !== sectionId);
+    });
+  }, []);
+
+  const handleSectionDragStart = useCallback((event, sectionId) => {
+    event.dataTransfer.setData("text/section-id", sectionId);
+    event.dataTransfer.effectAllowed = "move";
+    setDraggedSectionId(sectionId);
+    setDragOverSectionId(sectionId);
+  }, []);
+
+  const handleSectionDragOver = useCallback((event, sectionId) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverSectionId((current) => (current === sectionId ? current : sectionId));
+  }, []);
+
+  const handleSectionDrop = useCallback(
+    (event, targetSectionId) => {
+      event.preventDefault();
+      const sourceSectionId = event.dataTransfer.getData("text/section-id") || draggedSectionId;
+      if (!sourceSectionId || sourceSectionId === targetSectionId) {
+        setDragOverSectionId("");
+        setDraggedSectionId("");
+        return;
+      }
+
+      setSectionDrafts((current) => {
+        const sourceIndex = current.findIndex((section) => section.id === sourceSectionId);
+        const targetIndex = current.findIndex((section) => section.id === targetSectionId);
+        if (sourceIndex < 0 || targetIndex < 0) return current;
+        const next = [...current];
+        const [moved] = next.splice(sourceIndex, 1);
+        next.splice(targetIndex, 0, moved);
+        return next;
+      });
+
+      setDragOverSectionId("");
+      setDraggedSectionId("");
+    },
+    [draggedSectionId]
+  );
+
+  const handleSectionDragEnd = useCallback(() => {
+    setDragOverSectionId("");
+    setDraggedSectionId("");
+  }, []);
+
+  const handleSaveSections = useCallback(() => {
+    const normalizedSections = normalizeSections(sectionDrafts);
+    const statusIds = normalizedSections.map((section) => section.id);
+    const fallbackStatus = statusIds[0] || DEFAULT_STATUS_ID;
+
+    patchActiveProject((project) => ({
+      ...project,
+      sections: normalizedSections,
+      tasks: project.tasks.map((task) =>
+        statusIds.includes(task.status)
+          ? task
+          : {
+              ...task,
+              status: fallbackStatus
+            }
+      )
+    }));
+
+    setFormValues((current) => ({
+      ...current,
+      status: statusIds.includes(current.status) ? current.status : fallbackStatus
+    }));
+    setSectionsDialogOpen(false);
+  }, [patchActiveProject, sectionDrafts]);
+
+  const openCreateDialog = useCallback(() => {
+    setEditingTaskId(null);
+    setFormValues(createBlankForm(defaultStatus));
+    setChecklistDraft([]);
+    setDialogOpen(true);
+  }, [defaultStatus]);
+
   const openCreateDialogForStatus = useCallback((status) => {
-    const nextCardType = resolveTaskCardType("", status);
+    const nextStatus = sectionIds.includes(status) ? status : defaultStatus;
+    const nextCardType = resolveTaskCardType("", nextStatus);
     const nextChecklistText =
       nextCardType === "checklist"
         ? "[ ] Plan steps\n[ ] Complete action\n[ ] Review result"
         : "";
     setEditingTaskId(null);
     setFormValues({
-      ...blankForm,
-      status,
+      ...createBlankForm(defaultStatus),
+      status: nextStatus,
       cardType: nextCardType,
       checklistText: nextChecklistText,
       recurrenceRule: nextCardType === "recurring" ? "weekly" : "none",
@@ -1165,7 +1369,7 @@ function App() {
     });
     setChecklistDraft(parseChecklistText(nextChecklistText));
     setDialogOpen(true);
-  }, []);
+  }, [defaultStatus, sectionIds]);
 
   const openEditDialog = useCallback((task) => {
     const nextChecklistText = checklistTextFromItems(task.cardMeta.checklistItems);
@@ -1550,7 +1754,7 @@ function App() {
       .split(",")
       .map((tag) => tag.trim())
       .filter(Boolean);
-    const normalizedStatus = formValues.status;
+    const normalizedStatus = sectionIds.includes(formValues.status) ? formValues.status : defaultStatus;
     const normalizedCardType = resolveTaskCardType(formValues.cardType, normalizedStatus);
     const checklistItems =
       normalizedCardType === "checklist"
@@ -1612,19 +1816,24 @@ function App() {
     }));
   }, [patchActiveProject]);
 
-  const handleDrop = useCallback((status, event) => {
-    event.preventDefault();
-    const taskId = event.dataTransfer.getData("text/task-id");
-    if (!taskId) return;
+  const handleMoveTaskStatus = useCallback((taskId, status) => {
+    if (!taskId || !sectionIds.includes(status)) return;
 
     patchActiveProject((project) => ({
       ...project,
       tasks: project.tasks.map((task) => (task.id === taskId ? { ...task, status } : task))
     }));
+    setDropPulseStatus(status);
+  }, [patchActiveProject, sectionIds]);
+
+  const handleDrop = useCallback((status, event) => {
+    event.preventDefault();
+    const taskId = event.dataTransfer.getData("text/task-id");
+    if (!taskId) return;
+    handleMoveTaskStatus(taskId, status);
     setDraggedTaskId("");
     setDragOverStatus("");
-    setDropPulseStatus(status);
-  }, [patchActiveProject]);
+  }, [handleMoveTaskStatus]);
 
   const handleTaskDragStart = useCallback((event, taskId) => {
     event.dataTransfer.setData("text/task-id", taskId);
@@ -1640,7 +1849,12 @@ function App() {
   return (
     <main className="workspace-shell mx-auto w-[min(1560px,98vw)] py-4">
       <div className="workspace-layout grid grid-cols-1 gap-3 lg:grid-cols-[250px_minmax(0,1fr)]">
-        <aside className="workspace-sidebar flex flex-col rounded-2xl border border-border/70 bg-card/85 p-3 shadow-sm lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]">
+        <aside
+          className={cn(
+            "workspace-sidebar flex flex-col rounded-2xl border border-border/70 bg-card/85 p-3 shadow-sm transition-[max-height] duration-300 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:max-h-[calc(100vh-2rem)]",
+            mobileSidebarOpen ? "max-h-[85vh]" : "max-h-[76px] lg:max-h-[calc(100vh-2rem)]"
+          )}
+        >
           <div className="flex items-center gap-2 rounded-xl border border-border/65 bg-background/70 px-2.5 py-2">
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <KanbanSquare className="h-4 w-4" />
@@ -1649,91 +1863,111 @@ function App() {
               <p className="truncate text-sm font-semibold">LifeFlow Planner</p>
               <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Any Plan, Any Goal</p>
             </div>
-          </div>
-
-          <Button className="mt-3 h-11 justify-start gap-2 rounded-xl" onClick={openCreateProjectDialog}>
-            <Plus className="h-4 w-4" />
-            New Plan
-          </Button>
-
-          <div className="mt-4">
-            <p className="text-[11px] uppercase tracking-[0.13em] text-muted-foreground">Plans</p>
-            <div className="mt-2 space-y-1.5 overflow-y-auto pr-1 lg:max-h-[42vh]">
-              {workspace.projects.map((project) => {
-                const isActive = project.id === activeProject?.id;
-                return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    onClick={() => handleSelectProject(project.id)}
-                    className={cn(
-                      "workspace-project-item w-full rounded-xl border border-border/65 bg-background/55 px-2.5 py-2 text-left transition",
-                      isActive && "is-active border-primary/45 bg-primary/12"
-                    )}
-                  >
-                    <p className="line-clamp-1 text-sm font-semibold">{project.name}</p>
-                    <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <span>{project.tasks.length} {project.tasks.length === 1 ? "item" : "items"}</span>
-                      <span className="h-1 w-1 rounded-full bg-muted-foreground/60" />
-                      <span>{PROJECT_TYPE_OPTIONS.find((option) => option.id === project.type)?.label ?? "Custom"}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <p className="text-[11px] uppercase tracking-[0.13em] text-muted-foreground">Views</p>
-            <div className="mt-2 space-y-1">
-              <button
-                type="button"
-                onClick={() => setView("board")}
-                className={cn(
-                  "workspace-view-switch flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm",
-                  view === "board"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                <KanbanSquare className="h-4 w-4" />
-                Kanban
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("notes")}
-                className={cn(
-                  "workspace-view-switch flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm",
-                  view === "notes"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                <NotebookPen className="h-4 w-4" />
-                Notes
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <Button variant="outline" size="sm" className="h-9 gap-1" onClick={openEditProjectDialog}>
-              <Settings2 className="h-4 w-4" />
-              Edit
-            </Button>
             <Button
-              variant="outline"
+              type="button"
+              variant="ghost"
               size="sm"
-              className="h-9 gap-1 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={handleDeleteActiveProject}
+              className="ml-auto h-8 px-2 text-xs lg:hidden"
+              onClick={() => setMobileSidebarOpen((current) => !current)}
             >
-              <Trash2 className="h-4 w-4" />
-              Delete
+              {mobileSidebarOpen ? "Close" : "Plans"}
             </Button>
           </div>
 
-          <div className="mt-4 rounded-xl border border-dashed border-border/70 bg-background/50 p-3 text-xs text-muted-foreground">
-            <p className="font-semibold text-foreground">Quick Tip</p>
-            Use templates to start fast, and save links in Notes for tutorials and material lists.
+          <div className={cn("mt-3", !mobileSidebarOpen && "hidden lg:block")}>
+            <Button className="h-11 justify-start gap-2 rounded-xl" onClick={openCreateProjectDialog}>
+              <Plus className="h-4 w-4" />
+              New Plan
+            </Button>
+
+            <div className="mt-4">
+              <p className="text-[11px] uppercase tracking-[0.13em] text-muted-foreground">Plans</p>
+              <div className="mt-2 space-y-1.5 overflow-y-auto pr-1 lg:max-h-[42vh]">
+                {workspace.projects.map((project) => {
+                  const isActive = project.id === activeProject?.id;
+                  return (
+                    <button
+                      key={project.id}
+                      type="button"
+                      onClick={() => {
+                        handleSelectProject(project.id);
+                        setMobileSidebarOpen(false);
+                      }}
+                      className={cn(
+                        "workspace-project-item w-full rounded-xl border border-border/65 bg-background/55 px-2.5 py-2 text-left transition",
+                        isActive && "is-active border-primary/45 bg-primary/12"
+                      )}
+                    >
+                      <p className="line-clamp-1 text-sm font-semibold">{project.name}</p>
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <span>{project.tasks.length} {project.tasks.length === 1 ? "item" : "items"}</span>
+                        <span className="h-1 w-1 rounded-full bg-muted-foreground/60" />
+                        <span>{PROJECT_TYPE_OPTIONS.find((option) => option.id === project.type)?.label ?? "Custom"}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-[11px] uppercase tracking-[0.13em] text-muted-foreground">Views</p>
+              <div className="mt-2 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("board");
+                    setMobileSidebarOpen(false);
+                  }}
+                  className={cn(
+                    "workspace-view-switch flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm",
+                    view === "board"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  )}
+                >
+                  <KanbanSquare className="h-4 w-4" />
+                  Kanban
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("notes");
+                    setMobileSidebarOpen(false);
+                  }}
+                  className={cn(
+                    "workspace-view-switch flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm",
+                    view === "notes"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  )}
+                >
+                  <NotebookPen className="h-4 w-4" />
+                  Notes
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button variant="outline" size="sm" className="h-9 gap-1" onClick={openEditProjectDialog}>
+                <Settings2 className="h-4 w-4" />
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={handleDeleteActiveProject}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </Button>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-dashed border-border/70 bg-background/50 p-3 text-xs text-muted-foreground">
+              <p className="font-semibold text-foreground">Quick Tip</p>
+              Use templates to start fast, and save links in Notes for tutorials and material lists.
+            </div>
           </div>
         </aside>
 
@@ -1741,6 +1975,18 @@ function App() {
           <header className="workspace-topbar mb-3 rounded-2xl border border-border/70 bg-card/82 px-4 py-3 shadow-sm">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="min-w-0">
+                <div className="flex items-center gap-2 lg:hidden">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1 px-2 text-xs"
+                    onClick={() => setMobileSidebarOpen((current) => !current)}
+                  >
+                    <PanelLeft className="h-3.5 w-3.5" />
+                    Plans
+                  </Button>
+                </div>
                 <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Active Plan</p>
                 <h1 className="mt-1 line-clamp-1 text-2xl font-semibold tracking-tight sm:text-3xl">
                   {activeProject?.name ?? "LifeFlow Planner"}
@@ -1753,7 +1999,7 @@ function App() {
                     {tasks.length} {tasks.length === 1 ? "Item" : "Items"}
                   </Badge>
                   <Badge className="border-border/70 bg-secondary text-secondary-foreground">
-                    {tasks.filter((task) => task.status === "done").length} Done
+                    {tasks.filter((task) => task.status === completedStatusId).length} Done
                   </Badge>
                   <Badge className="border-border/70 bg-secondary text-secondary-foreground">
                     {notesState.notes.length} {notesState.notes.length === 1 ? "Note" : "Notes"}
@@ -1791,7 +2037,11 @@ function App() {
                       <option value="high">High</option>
                       <option value="urgent">Urgent</option>
                     </select>
-                    <Button className="h-9 gap-1.5" onClick={openCreateDialog}>
+                    <Button variant="outline" className="h-9 gap-1.5" onClick={openSectionsDialog}>
+                      <Settings2 className="h-4 w-4" />
+                      Sections
+                    </Button>
+                    <Button className="hidden h-9 gap-1.5 sm:inline-flex" onClick={openCreateDialog}>
                       <Plus className="h-4 w-4" />
                       Add Item
                     </Button>
@@ -1822,7 +2072,7 @@ function App() {
           >
             <LayoutGroup id="kanban-layout">
               <motion.section layout className="kanban-board grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-4">
-                {STATUSES.map((column, columnIndex) => {
+                {sections.map((column, columnIndex) => {
                   const columnTasks = groupedTasks[column.id] ?? [];
                   return (
                     <MotionCard
@@ -1872,8 +2122,11 @@ function App() {
                               task={task}
                               index={taskIndex}
                               isDragging={draggedTaskId === task.id}
+                              sections={sections}
+                              completedStatusId={completedStatusId}
                               onEdit={openEditDialog}
                               onDelete={handleDeleteTask}
+                              onMove={handleMoveTaskStatus}
                               onDragStart={handleTaskDragStart}
                               onDragEnd={handleTaskDragEnd}
                             />
@@ -1883,7 +2136,7 @@ function App() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="mt-1 w-full justify-center gap-1 border border-dashed border-border/70 text-xs text-muted-foreground hover:border-primary/45 hover:text-foreground"
+                          className="mt-1 hidden w-full justify-center gap-1 border border-dashed border-border/70 text-xs text-muted-foreground hover:border-primary/45 hover:text-foreground sm:inline-flex"
                           onClick={() => openCreateDialogForStatus(column.id)}
                         >
                           <Plus className="h-3.5 w-3.5" />
@@ -1895,6 +2148,14 @@ function App() {
                 })}
               </motion.section>
             </LayoutGroup>
+            <Button
+              type="button"
+              className="fixed bottom-4 right-4 z-30 h-11 gap-2 rounded-full px-4 shadow-lg sm:hidden"
+              onClick={openCreateDialog}
+            >
+              <Plus className="h-4 w-4" />
+              Add Item
+            </Button>
           </motion.div>
         ) : (
           <motion.div
@@ -2154,6 +2415,107 @@ function App() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={sectionsDialogOpen}
+        onOpenChange={(open) => {
+          setSectionsDialogOpen(open);
+          if (!open) {
+            setDragOverSectionId("");
+            setDraggedSectionId("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Sections</DialogTitle>
+            <DialogDescription>
+              Add, rename, or remove board sections for this plan.
+            </DialogDescription>
+          </DialogHeader>
+
+            <div className="mt-4 space-y-3">
+              <div className="max-h-[40vh] space-y-2 overflow-y-auto pr-1">
+                {sectionDrafts.map((section, index) => (
+                  <div
+                    key={section.id}
+                    onDragOver={(event) => handleSectionDragOver(event, section.id)}
+                    onDrop={(event) => handleSectionDrop(event, section.id)}
+                    className={cn(
+                      "rounded-md border border-border/70 bg-background/45 p-2.5 transition-colors",
+                      dragOverSectionId === section.id && "border-primary/60 bg-primary/10",
+                      draggedSectionId === section.id && "opacity-70"
+                    )}
+                  >
+                    <div className="mb-1 text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
+                      Section {index + 1}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 cursor-grab active:cursor-grabbing"
+                        draggable
+                        onDragStart={(event) => handleSectionDragStart(event, section.id)}
+                        onDragEnd={handleSectionDragEnd}
+                        aria-label={`Drag to reorder ${section.label}`}
+                      >
+                        <GripVertical className="h-4 w-4" />
+                      </Button>
+                      <Input
+                        value={section.label}
+                        maxLength={40}
+                        onChange={(event) => handleSectionDraftLabelChange(section.id, event.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 px-2 text-destructive hover:text-destructive"
+                        disabled={sectionDrafts.length <= 1}
+                        onClick={() => handleDeleteSectionDraft(section.id)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+              <Input
+                placeholder="New section name"
+                maxLength={40}
+                value={newSectionLabel}
+                onChange={(event) => setNewSectionLabel(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  handleAddSectionDraft();
+                }}
+              />
+              <Button type="button" className="gap-1.5" onClick={handleAddSectionDraft}>
+                <Plus className="h-4 w-4" />
+                Add Section
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Drag the handle to reorder sections. If you delete a section, its items move to the first section.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setSectionsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleSaveSections}>
+              Save Sections
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -2218,10 +2580,11 @@ function App() {
                 value={formValues.status}
                 onChange={handleFieldChange}
               >
-                <option value="backlog">Backlog</option>
-                <option value="in-progress">In Progress</option>
-                <option value="review">Review</option>
-                <option value="done">Done</option>
+                {sections.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.label}
+                  </option>
+                ))}
               </select>
             </label>
 
