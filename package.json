@@ -54,6 +54,7 @@
   "build": {
     "appId": "com.kanbanboard.desktop",
     "productName": "KanbanBoard",
+    "icon": "build/icons/icon-1024.png",
     "directories": {
       "output": "release"
     },
@@ -66,16 +67,19 @@
       "main": "electron/main.cjs"
     },
     "win": {
+      "icon": "build/icons/icon-1024.png",
       "target": [
         "nsis"
       ]
     },
     "mac": {
+      "icon": "build/icons/icon.icns",
       "target": [
         "dmg"
       ]
     },
     "linux": {
+      "icon": "build/icons/icon-1024.png",
       "target": [
         "AppImage"
       ]
