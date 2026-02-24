@@ -58,10 +58,10 @@ const DEFAULT_SECTIONS = [
 const DEFAULT_STATUS_ID = DEFAULT_SECTIONS[0].id;
 
 const priorityClass = {
-  low: "bg-emerald-700/90 text-white border-emerald-800",
-  medium: "bg-amber-600 text-white border-amber-700",
-  high: "bg-orange-700 text-white border-orange-800",
-  urgent: "bg-red-700 text-white border-red-800"
+  low: "border-emerald-300/80 bg-emerald-500/80 text-white",
+  medium: "border-amber-300/80 bg-amber-500/80 text-white",
+  high: "border-orange-300/80 bg-orange-500/85 text-white",
+  urgent: "border-rose-300/80 bg-rose-500/85 text-white"
 };
 
 const TASK_CARD_TYPE_OPTIONS = [
@@ -1898,7 +1898,7 @@ function App() {
               <KanbanSquare className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">LifeFlow Planner</p>
+              <p className="workspace-brand-title truncate text-sm font-semibold">LifeFlow Planner</p>
               <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Any Plan, Any Goal</p>
             </div>
             <Button
@@ -1933,7 +1933,7 @@ function App() {
                       }}
                       className={cn(
                         "workspace-project-item w-full rounded-xl border border-border/65 bg-background/55 px-2.5 py-2 text-left transition",
-                        isActive && "is-active border-primary/45 bg-primary/12"
+                        isActive && "is-active border-primary/45 bg-gradient-to-r from-cyan-500/20 to-blue-500/18"
                       )}
                     >
                       <p className="line-clamp-1 text-sm font-semibold">{project.name}</p>
@@ -1960,7 +1960,7 @@ function App() {
                   className={cn(
                     "workspace-view-switch flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm",
                     view === "board"
-                      ? "bg-primary text-primary-foreground shadow-sm"
+                      ? "border border-white/45 bg-gradient-to-r from-cyan-500/90 to-blue-500/90 text-white shadow-sm"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground"
                   )}
                 >
@@ -1976,7 +1976,7 @@ function App() {
                   className={cn(
                     "workspace-view-switch flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm",
                     view === "notes"
-                      ? "bg-primary text-primary-foreground shadow-sm"
+                      ? "border border-white/45 bg-gradient-to-r from-cyan-500/90 to-blue-500/90 text-white shadow-sm"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground"
                   )}
                 >

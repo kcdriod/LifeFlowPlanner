@@ -3,44 +3,45 @@
 @tailwind utilities;
 
 :root {
-  --background: 44 41% 95%;
-  --foreground: 24 10% 13%;
+  --font-display: "Sora", "Space Grotesk", "Inter", "Segoe UI Variable", sans-serif;
+  --background: 206 100% 97%;
+  --foreground: 212 51% 17%;
   --card: 0 0% 100%;
-  --card-foreground: 24 10% 13%;
-  --primary: 14 72% 58%;
-  --primary-foreground: 30 60% 98%;
-  --secondary: 34 32% 90%;
-  --secondary-foreground: 28 24% 22%;
-  --muted: 36 24% 90%;
-  --muted-foreground: 20 9% 40%;
-  --accent: 24 64% 93%;
-  --accent-foreground: 24 20% 20%;
+  --card-foreground: 212 51% 17%;
+  --primary: 186 72% 46%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 204 67% 93%;
+  --secondary-foreground: 213 40% 28%;
+  --muted: 205 57% 92%;
+  --muted-foreground: 212 22% 44%;
+  --accent: 211 100% 92%;
+  --accent-foreground: 212 51% 22%;
   --destructive: 0 72% 50%;
   --destructive-foreground: 0 0% 98%;
-  --border: 30 20% 82%;
-  --input: 30 20% 82%;
-  --ring: 14 72% 58%;
-  --radius: 0.75rem;
+  --border: 208 46% 83%;
+  --input: 208 46% 83%;
+  --ring: 216 95% 63%;
+  --radius: 0.9rem;
 }
 
 .dark {
-  --background: 24 16% 10%;
-  --foreground: 38 25% 92%;
-  --card: 24 13% 14%;
-  --card-foreground: 38 25% 92%;
-  --primary: 14 74% 59%;
-  --primary-foreground: 24 20% 9%;
-  --secondary: 24 12% 20%;
-  --secondary-foreground: 34 20% 88%;
-  --muted: 24 10% 18%;
-  --muted-foreground: 30 12% 66%;
-  --accent: 24 14% 22%;
-  --accent-foreground: 36 22% 92%;
+  --background: 221 40% 11%;
+  --foreground: 211 35% 92%;
+  --card: 219 37% 15%;
+  --card-foreground: 211 35% 92%;
+  --primary: 188 78% 52%;
+  --primary-foreground: 219 39% 12%;
+  --secondary: 220 25% 22%;
+  --secondary-foreground: 210 24% 90%;
+  --muted: 220 20% 20%;
+  --muted-foreground: 214 16% 69%;
+  --accent: 220 22% 24%;
+  --accent-foreground: 211 35% 92%;
   --destructive: 0 64% 50%;
   --destructive-foreground: 0 0% 98%;
-  --border: 24 10% 26%;
-  --input: 24 10% 26%;
-  --ring: 14 74% 59%;
+  --border: 218 21% 30%;
+  --input: 218 21% 30%;
+  --ring: 216 95% 63%;
 }
 
 * {
@@ -57,29 +58,53 @@ html.dark {
 
 body {
   @apply bg-background text-foreground antialiased;
-  font-family: "Avenir Next", "Segoe UI Variable", "Trebuchet MS", sans-serif;
-  background-image: radial-gradient(circle at 85% -5%, rgba(236, 157, 93, 0.3), transparent 30%),
-    radial-gradient(circle at -5% 90%, rgba(91, 145, 121, 0.3), transparent 30%);
+  font-family: "Inter", "Segoe UI Variable", "Avenir Next", sans-serif;
+  background-image:
+    radial-gradient(circle at 8% 12%, rgba(62, 168, 255, 0.22), transparent 34%),
+    radial-gradient(circle at 92% 0%, rgba(77, 255, 221, 0.26), transparent 33%),
+    radial-gradient(circle at 88% 92%, rgba(96, 123, 255, 0.22), transparent 31%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(248, 252, 255, 0.1));
   min-height: 100vh;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition: background-color 180ms ease, color 180ms ease;
 }
 
 .dark body {
-  background-image: radial-gradient(circle at 85% -5%, rgba(236, 157, 93, 0.12), transparent 33%),
-    radial-gradient(circle at -5% 90%, rgba(91, 145, 121, 0.12), transparent 33%);
+  background-image:
+    radial-gradient(circle at 8% 10%, rgba(69, 176, 255, 0.18), transparent 35%),
+    radial-gradient(circle at 92% 0%, rgba(80, 255, 214, 0.16), transparent 35%),
+    radial-gradient(circle at 90% 90%, rgba(87, 108, 255, 0.18), transparent 30%);
 }
 
 .workspace-shell {
   position: relative;
+  isolation: isolate;
 }
 
 .workspace-layout {
   align-items: start;
 }
 
+.workspace-brand-title,
+.workspace-topbar h1,
+.workspace-main h2,
+.workspace-main h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.kanban-board {
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
 .workspace-sidebar {
   position: relative;
   overflow: clip;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: linear-gradient(160deg, hsl(0 0% 100% / 0.72), hsl(207 80% 97% / 0.5));
+  border-color: hsl(0 0% 100% / 0.56);
 }
 
 .workspace-sidebar::before {
@@ -92,28 +117,47 @@ body {
 
 .workspace-project-item {
   position: relative;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .workspace-project-item:hover {
-  border-color: hsl(var(--primary) / 0.35);
-  transform: translateY(-1px);
+  border-color: hsl(var(--primary) / 0.42);
+  transform: translateY(-1px) translateZ(0);
+  background: linear-gradient(145deg, hsl(0 0% 100% / 0.76), hsl(var(--accent) / 0.58));
+  box-shadow: 0 12px 24px -18px hsl(210 56% 35% / 0.42);
 }
 
 .workspace-project-item.is-active {
-  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.25);
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.28),
+    0 10px 28px -18px hsl(201 70% 36% / 0.48);
+  background: linear-gradient(145deg, hsl(var(--primary) / 0.2), hsl(0 0% 100% / 0.72));
 }
 
 .workspace-view-switch {
-  transition: background-color 180ms ease, color 180ms ease, transform 160ms ease;
+  transition: background-color 180ms ease, color 180ms ease, transform 160ms ease, box-shadow 180ms ease;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .workspace-view-switch:hover {
-  transform: translateX(1px);
+  transform: translateX(1px) translateZ(0);
+  box-shadow: 0 8px 22px -16px hsl(210 58% 34% / 0.45);
 }
 
 .workspace-topbar {
   position: relative;
   overflow: clip;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: linear-gradient(155deg, hsl(0 0% 100% / 0.62), hsl(208 88% 96% / 0.46));
+  border-color: hsl(0 0% 100% / 0.5);
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .workspace-topbar::after {
@@ -126,20 +170,28 @@ body {
 }
 
 .workspace-column {
-  backdrop-filter: blur(3px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: linear-gradient(165deg, hsl(0 0% 100% / 0.62), hsl(208 80% 96% / 0.45));
+  border-color: hsl(0 0% 100% / 0.5);
+  will-change: transform, box-shadow;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .dark .workspace-sidebar {
-  background: linear-gradient(170deg, hsl(var(--card) / 0.92), hsl(222 33% 8% / 0.92));
+  background: linear-gradient(165deg, hsl(220 34% 17% / 0.88), hsl(224 43% 10% / 0.8));
+  border-color: hsl(214 56% 74% / 0.18);
 }
 
 .dark .workspace-topbar,
 .dark .workspace-column {
-  background: linear-gradient(165deg, hsl(var(--card) / 0.86), hsl(226 36% 9% / 0.82));
+  background: linear-gradient(165deg, hsl(220 34% 18% / 0.74), hsl(226 36% 11% / 0.62));
+  border-color: hsl(214 56% 74% / 0.2);
 }
 
 .dark .workspace-project-item {
-  background: linear-gradient(165deg, hsl(227 34% 13% / 0.72), hsl(var(--card) / 0.62));
+  background: linear-gradient(165deg, hsl(226 33% 16% / 0.7), hsl(220 34% 20% / 0.52));
 }
 
 .kanban-task {
@@ -148,46 +200,49 @@ body {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
     box-shadow 200ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 160ms ease,
     background-color 160ms ease, opacity 140ms ease;
-  will-change: transform;
+  will-change: transform, box-shadow;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .task-card-classic {
-  background: hsl(var(--background) / 0.84);
+  background: linear-gradient(145deg, hsl(0 0% 100% / 0.7), hsl(var(--background) / 0.72));
+  border-color: hsl(0 0% 100% / 0.54);
 }
 
 .task-card-focus {
-  border-color: hsl(212 82% 63% / 0.4);
+  border-color: hsl(212 82% 63% / 0.46);
   background-image: linear-gradient(
     155deg,
-    hsl(216 92% 58% / 0.14) 0%,
-    hsl(216 92% 58% / 0.03) 48%,
-    hsl(var(--background) / 0.9) 100%
+    hsl(216 92% 58% / 0.2) 0%,
+    hsl(216 92% 58% / 0.06) 48%,
+    hsl(var(--background) / 0.82) 100%
   );
 }
 
 .task-card-progress {
-  border-color: hsl(45 96% 55% / 0.38);
+  border-color: hsl(45 96% 55% / 0.44);
   background-image: linear-gradient(
     155deg,
-    hsl(46 96% 58% / 0.15) 0%,
-    hsl(46 96% 58% / 0.04) 45%,
-    hsl(var(--background) / 0.9) 100%
+    hsl(46 96% 58% / 0.22) 0%,
+    hsl(46 96% 58% / 0.07) 45%,
+    hsl(var(--background) / 0.82) 100%
   );
 }
 
 .task-card-checklist {
-  border-color: hsl(314 81% 61% / 0.36);
+  border-color: hsl(314 81% 61% / 0.42);
   background-image: linear-gradient(
     155deg,
-    hsl(314 84% 62% / 0.14) 0%,
-    hsl(314 84% 62% / 0.03) 50%,
-    hsl(var(--background) / 0.9) 100%
+    hsl(314 84% 62% / 0.18) 0%,
+    hsl(314 84% 62% / 0.05) 50%,
+    hsl(var(--background) / 0.82) 100%
   );
 }
 
 .kanban-task:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 24px -14px rgba(16, 24, 40, 0.55);
+  transform: translateY(-2px) translateZ(0);
+  box-shadow: 0 14px 28px -16px rgba(16, 24, 40, 0.45);
 }
 
 .kanban-task:active {
@@ -196,7 +251,7 @@ body {
 
 .kanban-task.is-dragging {
   opacity: 0.88;
-  transform: rotate(1.2deg) scale(1.02);
+  transform: rotate(1.2deg) scale(1.02) translateZ(0);
   box-shadow: 0 20px 36px -16px rgba(15, 23, 42, 0.65);
   cursor: grabbing;
 }
@@ -204,6 +259,9 @@ body {
 .kanban-column {
   position: relative;
   transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  will-change: transform, box-shadow;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
 }
 
 .kanban-column::after {
@@ -218,7 +276,9 @@ body {
 }
 
 .kanban-column.kanban-drop-active {
-  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.2);
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.28),
+    0 16px 32px -20px hsl(201 70% 36% / 0.45);
 }
 
 .kanban-column.kanban-drop-active::after {
@@ -271,6 +331,16 @@ body {
   .kanban-task,
   .kanban-column {
     transition: none !important;
+  }
+
+  .workspace-project-item,
+  .workspace-view-switch,
+  .workspace-topbar,
+  .workspace-column,
+  .kanban-task,
+  .kanban-column {
+    will-change: auto !important;
+    transform: none !important;
   }
 }
 

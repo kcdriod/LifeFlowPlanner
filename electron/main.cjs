@@ -5,6 +5,13 @@ const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 const appName = "LifeFlow Planner";
 const desktopIconPath = path.join(__dirname, "..", "build", "icons", "icon-1024.png");
 
+// Keep GPU acceleration enabled and bias Chromium toward GPU compositing for UI-heavy views.
+app.commandLine.appendSwitch("enable-gpu-rasterization");
+app.commandLine.appendSwitch("enable-zero-copy");
+if (process.env.ELECTRON_FORCE_GPU === "1") {
+  app.commandLine.appendSwitch("ignore-gpu-blocklist");
+}
+
 function createMainWindow() {
   const window = new BrowserWindow({
     title: appName,
