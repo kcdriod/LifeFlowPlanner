@@ -235,9 +235,33 @@ jobs:
           TAG_NAME: ${{ steps.resolve_tag.outputs.tag }}
           GH_REPO: ${{ github.repository }}
         run: |
+          retry() {
+            local attempts="$1"
+            local delay="$2"
+            shift 2
+            local n=1
+            while true; do
+              if "$@"; then
+                return 0
+              fi
+              if [[ "$n" -ge "$attempts" ]]; then
+                echo "Command failed after $n attempts: $*" >&2
+                return 1
+              fi
+              echo "Attempt $n failed. Retrying in ${delay}s..." >&2
+              sleep "$delay"
+              n=$((n + 1))
+              delay=$((delay * 2))
+            done
+          }
+
           mapfile -t files < <(find release-assets -maxdepth 1 -type f \( -name "*.exe" -o -name "*.dmg" \) -print)
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "No installer assets found." >&2
             exit 1
           fi
-          gh release upload "$TAG_NAME" "${files[@]}" --clobber --repo "$GH_REPO"
+
+          # GitHub API can intermittently return 5xx for releases/tags endpoints.
+          # Verify tag lookup first, then retry upload with exponential backoff.
+          retry 8 2 gh api "repos/$GH_REPO/releases/tags/$TAG_NAME" --silent
+          retry 8 2 gh release upload "$TAG_NAME" "${files[@]}" --clobber --repo "$GH_REPO"
